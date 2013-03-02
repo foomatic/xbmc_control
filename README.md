@@ -4,7 +4,7 @@ xbmc_control
 Command line tool to remote control xbmc using JSON with perl.
 
 
-Required perl-modules
+Required perl-modules:
   * XML::Simple
   * LWP::Simple
   * JSON::RPC::Client
