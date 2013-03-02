@@ -69,6 +69,8 @@ sub get_args { #fs
         'info|i'   => \$options->{info},
         'fullscreen'    => \$options->{fullscreen},
         'debug'    => \$options->{debug},
+        'ls|getDirectory=s'       => \$options->{getDirectory},
+        'gs|getSources:s'       => \$options->{getSources},
         #'mute'     => \$options->{mute},   # doesn't work (for now)
     );
 
@@ -130,8 +132,13 @@ Options:
     --volume=0..100         - sets playback volume
 
   Misc:
-    --info|-i               - prints name of current video and playback time 
-    --help                  - this text
+    --info|-i                 - prints name of current video and playback time 
+    --gs|--getSources[=<type>]  - Get Sources that are configured in xbmc
+                                <type>: video, music, pictures, files, programs (default: video)
+                                Note: "[source]" at the beginning of a path for --append, --play
+                                      or --ls will be resolved to the actual path.
+    --ls|--getDirectory=<path>  - List Directory contents of <path> (use after --getSources)
+    --help                    - this text
     --debug
 EOHELP
 ;
@@ -324,6 +331,8 @@ sub do_play { #fs
     my $itemnum=0;
     while ($itemnum < (scalar @items)) {
         $item = $items[$itemnum];
+
+        $item = resolv_source($item);
 
         my $url;   
         # item is youtube-link (guessed from url) or video-id (hinted by cmdline-argument)
@@ -622,6 +631,118 @@ sub do_plClear {   #fs
     return(send_request($callobj));
 } #fe
 
+sub do_getDirectory { #fs
+    my $dir = shift;
+
+    $dir = resolv_source($dir);
+
+    # {
+    #   "id":1,
+    #   "jsonrpc":"2.0",
+    #   "method":"Files.GetDirectory",
+    #   "params":{
+    #       "directory" : "%s",
+    #       "properties": List.Fields.Files,
+    #       "sort"      : List.Sort
+    #   }}
+    my $callobj = {
+        id      => 1,
+        jsonrpc => '2.0',
+        method  => "Files.GetDirectory",
+        params  => {
+            directory => $dir,
+            #message => $message,
+        },
+    };
+
+    my $rv = send_request($callobj);
+    #print Dumper($rv);
+    print "$dir:\n";
+    foreach my $entry (@{$rv->{files}}) {
+        # hash contents: filetype, file, type, label
+        #print sprintf("[%s] file: %s; type: %s; label: %s\n", $entry->{filetype}, $entry->{file}, $entry->{type}, $entry->{label});
+        print sprintf("[%s] %s\n", $entry->{filetype}, $entry->{label});
+    }
+} #fe
+
+sub do_getSources { #fs
+    # media is one of video, music, pictures, files, programs
+    my $media = shift;
+
+    # default if nothing given: video
+    if (not defined $media or $media eq '') {
+        $media = 'video';    
+    }
+
+    my $rv = fetch_sources($media);
+
+    #print Dumper($rv);
+    print "Sources for $media:\n";
+    foreach my $entry (@{$rv->{sources}}) {
+        # hash contents: file, label
+        print sprintf("%s:\t%s\n", $entry->{label}, $entry->{file});
+    }
+} #fe
+
+sub fetch_sources { #fs
+    # media is one of video, music, pictures, files, programs
+    my $media = shift || 'video';
+
+    # {
+    #   "id":1,
+    #   "jsonrpc":"2.0",
+    #   "method":"Files.GetSources",
+    #   "params":{
+    #       "media" : Files.Media,
+    #       "Limits": List.Limits,
+    #       "sort"  : List.Sort
+    #   }}
+    my $callobj = {
+        id      => 1,
+        jsonrpc => '2.0',
+        method  => "Files.GetSources",
+        params  => {
+            media => $media,
+            #message => $message,
+        },
+    };
+
+    return(send_request($callobj));
+} #fe
+
+# takes a string that contains a source-identifier and returns it
+# with the source resolved to its actual value.
+# Example:
+#   Arg: '[server1]/path/to/file'
+#   "server1" is the name of the source (any media)
+#             has value: "smb://server1/share/directory/"
+#   Return: "smb://server1/share/directory/path/to/file"
+sub resolv_source { #fs
+    my $url = shift;
+
+    if ($url =~ m/^\[([^]]+)\](.*)$/) {
+        my $source = $1;
+        my $path   = $2;
+        debug "resolv_source: source: >$source<; path: >$path<\n";
+        
+        # iterate sources of each type until the requested one is found 
+        foreach my $source_type (qw/video music pictures files programs/) {
+            debug "checking for source of type: $source_type\n";
+            my $sources = fetch_sources($source_type);
+            foreach my $curr_source (@{$sources->{sources}}) {
+                debug "source: [$curr_source->{label}] $curr_source->{file}\n";
+                if ($curr_source->{label} =~ m/$source/i) {
+                    debug "source match!\n";
+                    my $new_url = $curr_source->{file} . $path;
+                    return ($new_url);
+                }
+            }
+        }
+    }
+    return ($url);
+
+} #fe
+
 # xbmc json examples:
 # {"jsonrpc": "2.0", "method": "Player.GetActivePlayers", "id": 1}
 # {"jsonrpc": "2.0", "method": "Player.PlayPause", "params": { "playerid": 0 }, "id": 1}
@@ -646,6 +767,8 @@ sub main {
     if (defined $options->{plitems}) { do_plItems; };
     if (defined $options->{plclear}) { do_plClear; };
     if (defined $options->{plstart}) { do_plStart($options->{plstart}); };
+    if (defined $options->{getDirectory})  { do_getDirectory($options->{getDirectory}); };
+    if (defined $options->{getSources}){ do_getSources($options->{getSources}); };
 
 }
 
