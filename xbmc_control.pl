@@ -98,14 +98,14 @@ Options:
   Actions:
     <url>                   - item to play
     --play                  - play item
-    --append                - append item to playlist (excludes --play)
+    --append                - append item to playlist
     --plstart[=pos]         - play the playlist. From <pos> if given, first item is 0.
-    --insert=pos            - insert into playlist at pos [todo]
-    --youtube --yt          - items are youtube-links or video-IDs
+    --youtube --yt          - items are youtube-links or video-IDs (force detection)
 
   Playlist Control:
     --playlist              - list playlist items
     --plClear               - clear playlist
+    --plInsert=pos            - insert into playlist at pos [todo]
     --plRemove=pos          - delete item from playlist [todo]
     --plSwap=pos1,pos2      - swap items on playlist positions pos1 and pos2 [todo]
 
